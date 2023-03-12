@@ -1,4 +1,5 @@
-//go:build bootstrap
+//go:build ignore
+// +build ignore
 
 package main
 

@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	dagger.io/dagger v0.5.0
-	github.com/magefile/mage v1.14.0
+	github.com/magefile/mage v1.14.0 
 )
 
 require (

@@ -30,6 +30,7 @@ func deploy(ctx context.Context, d *dagger.Client) {
 	defaultRegion := hostEnv(ctx, d.Host(), "AWS_DEFAULT_REGION").Secret()
 	account := hostEnv(ctx, d.Host(), "CDK_DEFAULT_ACCOUNT").Secret()
 
+	localPath := "/build"
 	lint := lint(ctx, d)
 
 	_, err := d.Container().
@@ -39,8 +40,8 @@ func deploy(ctx context.Context, d *dagger.Client) {
 		WithSecretVariable("AWS_DEFAULT_REGION", defaultRegion).
 		WithSecretVariable("CDK_DEFAULT_REGION", defaultRegion).
 		WithSecretVariable("CDK_DEFAULT_ACCOUNT", account).
-		WithMountedDirectory("/build", lint).
-		WithWorkdir("/build").
+		WithMountedDirectory(localPath, lint).
+		WithWorkdir(localPath).
 		WithExec([]string{"npm", "install", "-g", "aws-cdk"}).
 		WithExec([]string{"npm", "install"}).
 		WithExec([]string{"npm", "run", "build"}).
@@ -60,20 +61,21 @@ func Lint(ctx context.Context) {
 }
 
 func lint(ctx context.Context, d *dagger.Client) *dagger.Directory {
+	localPath := "/data"
 	install := install(ctx, d)
 
 	lint := d.Container().
 		From(fmt.Sprintf("cytopia/eslint:%v", eslintVersion)).
-		WithMountedDirectory("/data", install).
-		WithExec([]string{"."})
+		WithMountedDirectory(localPath, install).
+		WithExec([]string{".", "--max-warnings=0"})
 
 	_, err := lint.ExitCode(ctx)
 
 	if err != nil {
-		panic(unavailableErr(err))
+		panic(err)
 	}
 
-	return lint.Directory("/data")
+	return lint.Directory(localPath)
 }
 
 func Install(ctx context.Context) {
@@ -84,19 +86,21 @@ func Install(ctx context.Context) {
 }
 
 func install(ctx context.Context, d *dagger.Client) *dagger.Directory {
+	localPath := "/src"
+
 	install := d.Container().
 		From(fmt.Sprintf("node:%v", nodeVersion)).
-		WithMountedDirectory("/src", sourceCode(d)).
-		WithWorkdir("/src").
+		WithMountedDirectory(localPath, sourceCode(d)).
+		WithWorkdir(localPath).
 		WithExec([]string{"npm", "ci", "&&", "npm", "run", "build"})
 
 	_, err := install.ExitCode(ctx)
 
 	if err != nil {
-		panic(unavailableErr(err))
+		panic(err)
 	}
 
-	return install.Directory("/src")
+	return install.Directory(localPath)
 }
 
 func sourceCode(d *dagger.Client) *dagger.Directory {
@@ -106,18 +110,9 @@ func sourceCode(d *dagger.Client) *dagger.Directory {
 func daggerClient(ctx context.Context) *dagger.Client {
 	client, err := dagger.Connect(ctx, dagger.WithLogOutput(os.Stdout))
 	if err != nil {
-		panic(unavailableErr(err))
+		panic(err)
 	}
 	return client
-}
-
-func unavailableErr(err error) Exit {
-	return Exit{Code: 69, Error: err}
-}
-
-type Exit struct {
-	Code  int
-	Error error
 }
 
 func hostEnv(ctx context.Context, host *dagger.Host, varName string) *dagger.HostVariable {
